@@ -1,0 +1,46 @@
+{
+  "easy": [
+    { "riddle": "Qual è il ticker della moneta di Ergo?", "answer": "ERG" },
+    { "riddle": "Come si chiama il wallet principale (estensione)?", "answer": "Nautilus" },
+    { "riddle": "Ergo usa la Proof of Stake? (Sì/No)", "answer": "No" },
+    { "riddle": "Qual è il nome del primo blocco di una blockchain?", "answer": "Genesi" },
+    { "riddle": "Quanti decimali ha 1 ERG? (NanoErgs)", "answer": "9" },
+    { "riddle": "Come si chiama il linguaggio di smart contract di Ergo?", "answer": "ErgoScript" },
+    { "riddle": "Il limite di monete ERG è infinito? (Sì/No)", "answer": "No" },
+    { "riddle": "Ergo è una blockchain programmabile? (Sì/No)", "answer": "Sì" },
+    { "riddle": "Chi firma le transazioni?", "answer": "Wallet" },
+    { "riddle": "Cosa significa PoW?", "answer": "Proof of Work" },
+    { "riddle": "Quanto fa 10 + 5 NanoErg?", "answer": "15" },
+    { "riddle": "Se hai 2 ERG e ne invii 1, quanti ne rimangono?", "answer": "1" }
+  ],
+  "medium": [
+    { "riddle": "Qual è il tempo di blocco medio in secondi?", "answer": "120" },
+    { "riddle": "Come si chiama il DEX principale di Ergo?", "answer": "Spectrum" },
+    { "riddle": "Qual è il modello di transazione usato da Ergo?", "answer": "eUTXO" },
+    { "riddle": "Come si chiama la stablecoin di Ergo?", "answer": "SigUSD" },
+    { "riddle": "Qual è il bridge principale dell'ecosistema?", "answer": "Rosen" },
+    { "riddle": "Si può fare mining con schede video (GPU)? (Sì/No)", "answer": "Sì" },
+    { "riddle": "Come si chiama il portale NFT di Ergo?", "answer": "SkyHarbor" },
+    { "riddle": "Quale algoritmo rende Ergo ASIC-resistant?", "answer": "Autolykos" },
+    { "riddle": "Cos'è un 'box' nel modello Ergo?", "answer": "UTXO" },
+    { "riddle": "Come si chiama il mixer di privacy su Ergo?", "answer": "ErgoMixer" },
+    
+    { "riddle": "Qual è il progetto per il crowdfunding su Ergo?", "answer": "ErgoPad" },
+    { "riddle": "Il protocollo Rosen usa un set di validatori chiamati...?", "answer": "Watchers" }
+  ],
+  "hard": [
+    { "riddle": "Qual è la Max Supply esatta di ERG?", "answer": "97739924" },
+    { "riddle": "In che anno è stato lanciato il blocco genesi di Ergo?", "answer": "2019" },
+    { "riddle": "Dopo quanti anni scatta la tassa di 'Storage Rent'?", "answer": "4" },
+    { "riddle": "Qual è lo pseudonimo del fondatore principale?", "answer": "Kushti" },
+    { "riddle": "Qual è la dimensione massima di un blocco in KB?", "answer": "128" },
+    { "riddle": "Come si chiamano i dati esterni portati on-chain?", "answer": "Oracle" },
+    { "riddle": "Qual è l'algoritmo attuale: Autolykos 1 o 2?", "answer": "2" },
+    { "riddle": "Chi ha co-fondato Ergo insieme a Kushti?", "answer": "Dmitry Meshkov" },
+    { "riddle": "Cosa sono i NiPoPoWs?", "answer": "Non-Interactive Proofs of Proof-of-Work" },
+    { "riddle": "Qual è la fee minima standard per una transazione?", "answer": "0.0011" },
+    
+    { "riddle": "Qual è l'ID del blocco Genesi?", "answer": "0" },
+    { "riddle": "Come si chiama l'estensione di Nautilus per i ledger?", "answer": "Nautilus" }
+  ]
+}
