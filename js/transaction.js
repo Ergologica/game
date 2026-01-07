@@ -1,13 +1,23 @@
+/* =========================
+   CONFIG
+========================= */
+
 const CONFIG = {
   TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
   ENTRY_FEE_ERG: 0.5
 };
 
+/* =========================
+   TRANSACTION MANAGER
+========================= */
+
 const TransactionManager = {
+
+  _pending: false,
 
   async connect() {
     if (typeof ergoConnector === "undefined" || !ergoConnector.nautilus) {
-      throw new Error("Nautilus wallet non trovato");
+      throw new Error("Nautilus wallet non installato");
     }
 
     const connected = await ergoConnector.nautilus.connect();
@@ -19,15 +29,18 @@ const TransactionManager = {
   },
 
   async payEntryFee() {
+    if (this._pending) return null;
+    this._pending = true;
+
     try {
       await this.connect();
 
-      // === Valori in nanoERG (NUMERI, non stringhe) ===
+      /* === Importi (NUMERI) === */
       const amountNano = Math.floor(CONFIG.ENTRY_FEE_ERG * 1e9);
       const feeNano = 1_100_000;
       const totalNeeded = amountNano + feeNano;
 
-      // === Dati wallet ===
+      /* === Wallet data === */
       const userAddress = await ergo.get_change_address();
       const currentHeight = await ergo.get_current_height();
       const utxos = await ergo.get_utxos(totalNeeded);
@@ -37,14 +50,12 @@ const TransactionManager = {
         return null;
       }
 
-      // === Output canonico Ergo ===
-      const treasuryTree = ergo.address_to_tree(CONFIG.TREASURY_ADDRESS);
-
+      /* === Costruzione TX canonica (Nautilus-safe) === */
       const unsignedTx = {
         inputs: utxos,
         dataInputs: [],
         outputs: [{
-          ergoTree: treasuryTree,
+          address: CONFIG.TREASURY_ADDRESS,
           value: amountNano,
           assets: [],
           additionalRegisters: {}
@@ -56,24 +67,38 @@ const TransactionManager = {
 
       console.log("Unsigned TX:", unsignedTx);
 
-      // === Firma + submit ===
+      /* === Firma + submit === */
       const signedTx = await ergo.sign_tx(unsignedTx);
       const txId = await ergo.submit_tx(signedTx);
 
-      console.log("TX inviata:", txId);
+      console.log("Transazione inviata:", txId);
       return txId;
 
     } catch (e) {
       console.error("Errore transazione:", e);
 
-      // Codice 2 = utente ha annullato
+      // code 2 = utente ha annullato la firma
       if (e?.code === 2) {
         console.log("Firma annullata dall’utente");
         return null;
       }
 
-      alert("Errore transazione: " + (e.info || e.message));
+      alert("Errore: " + (e.info || e.message));
       return null;
+
+    } finally {
+      this._pending = false;
     }
+  }
+};
+
+/* =========================
+   UI BINDING (ESEMPIO)
+========================= */
+
+document.getElementById("payButton").onclick = async () => {
+  const txId = await TransactionManager.payEntryFee();
+  if (txId) {
+    alert("Pagamento completato!\nTX ID:\n" + txId);
   }
 };
