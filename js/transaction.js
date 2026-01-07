@@ -1,6 +1,6 @@
 const CONFIG = {
     TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
-    ENTRY_FEE_ERG: 0.5,
+    ENTRY_FEE_ERG: "0.5",
     MINER_FEE_NANO: "1100000"
 };
 
@@ -14,43 +14,53 @@ const TransactionManager = {
 
     async payEntryFee() {
         try {
-            // 1. Assicuriamoci che i valori siano STRINGHE pure
-            const amountNano = "500000000"; // 0.5 ERG fisso per evitare calcoli JS
+            const amountNano = "500000000";
             const feeNano = CONFIG.MINER_FEE_NANO;
             const totalNeeded = (BigInt(amountNano) + BigInt(feeNano)).toString();
 
             const userAddress = await ergo.get_change_address();
-            const utxos = await ergo.get_utxos(totalNeeded);
+            const rawUtxos = await ergo.get_utxos(totalNeeded);
             const currentHeight = await ergo.get_current_height();
 
-            // 2. Pulizia totale dell'oggetto (niente campi superflui)
-            // L'errore startsWith spesso deriva da un campo 'value' passato come numero
+            if (!rawUtxos) throw new Error("Nessun UTXO trovato");
+
+            // --- PULIZIA MANUALE DEGLI INPUT ---
+            // Questo risolve il crash 'startsWith' se gli UTXO hanno asset complessi
+            const cleanInputs = rawUtxos.map(utxo => ({
+                boxId: utxo.boxId,
+                value: utxo.value.toString(),
+                ergoTree: utxo.ergoTree,
+                assets: utxo.assets || [],
+                additionalRegisters: utxo.additionalRegisters || {},
+                creationHeight: utxo.creationHeight,
+                transactionId: utxo.transactionId,
+                index: utxo.index
+            }));
+
             const unsignedTx = {
-                inputs: utxos,
+                inputs: cleanInputs,
                 dataInputs: [],
                 outputs: [
                     {
-                        address: CONFIG.TREASURY_ADDRESS.toString().trim(),
-                        value: amountNano, // Deve essere stringa
-                        assets: []
+                        address: CONFIG.TREASURY_ADDRESS.trim(),
+                        value: amountNano,
+                        assets: [],
+                        additionalRegisters: {}
                     }
                 ],
                 changeAddress: userAddress.toString(),
-                fee: feeNano, // Deve essere stringa
+                fee: feeNano,
                 creationHeight: parseInt(currentHeight)
             };
 
-            console.log("Tentativo finale di firma...");
+            console.log("Invio transazione pulita manualmente...");
             const signedTx = await ergo.sign_tx(unsignedTx);
-            const txId = await ergo.submit_tx(signedTx);
-            
-            return txId;
+            return await ergo.submit_tx(signedTx);
 
         } catch (e) {
-            console.error("Errore firma:", e);
-            // Ignoriamo il rifiuto utente, ma logghiamo errori tecnici
+            console.error("Errore critico:", e);
             if (e.code !== 2) {
-                alert("Errore Nautilus: " + (e.info || "Problema di sincronizzazione"));
+                alert("Errore tecnico: " + (e.info || e.message));
             }
             return null;
         }
