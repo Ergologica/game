@@ -4,33 +4,58 @@ const CONFIG = {
 };
 
 const TransactionManager = {
-    // Forza la connessione e attende la risposta del wallet
     async connect() {
         if (typeof ergoConnector !== 'undefined' && ergoConnector.nautilus) {
-            const isConnected = await ergoConnector.nautilus.connect();
-            if (isConnected) {
-                // Piccola attesa per permettere a Nautilus di iniettare l'oggetto 'ergo'
-                await new Promise(resolve => setTimeout(resolve, 500));
-                return true;
-            }
+            return await ergoConnector.nautilus.connect();
         }
-        alert("Nautilus non risponde. Assicurati che l'estensione sia sbloccata.");
+        alert("Nautilus Wallet non trovato!");
         return false;
+    },
+
+    async getAddress() {
+        return await ergo.get_change_address();
     },
 
     async payEntryFee() {
         try {
-            // Verifichiamo se l'oggetto ergo esiste, altrimenti lo cerchiamo nell'estensione
-            const context = (typeof ergo !== 'undefined') ? ergo : await ergoConnector.nautilus.getContext();
+            const userAddress = await ergo.get_change_address();
+            const utxos = await ergo.get_utxos();
             
-            const nanoErgs = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
+            if (!utxos || utxos.length === 0) {
+                throw new Error("Il tuo wallet sembra vuoto o non sincronizzato.");
+            }
+
+            const amountNano = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
+
+            // Costruzione manuale della transazione (Schema EIP-12)
+            const unsignedTx = {
+                inputs: utxos,
+                dataInputs: [],
+                outputs: [
+                    {
+                        address: CONFIG.TREASURY_ADDRESS,
+                        value: amountNano,
+                        assets: []
+                    }
+                ],
+                changeAddress: userAddress,
+                fee: "1100000", // 0.0011 ERG
+                assetsToBurn: []
+            };
+
+            console.log("Inviando richiesta di firma...");
             
-            // Usiamo il contesto diretto del wallet
-            const txId = await context.pay_to_address(CONFIG.TREASURY_ADDRESS, nanoErgs);
+            // Chiamata standard supportata da tutte le versioni
+            const signedTx = await ergo.sign_tx(unsignedTx);
+            const txId = await ergo.submit_tx(signedTx);
+            
+            console.log("Transazione sottomessa con successo ID:", txId);
             return txId;
+
         } catch (e) {
-            console.error("Errore firma:", e);
-            alert("Errore durante la firma: " + (e.info || e.message || "Riprova tra un istante"));
+            console.error("Errore firma transazione:", e);
+            const msg = e.info || e.message || "Errore sconosciuto";
+            alert("Errore Nautilus: " + msg);
             return null;
         }
     }
