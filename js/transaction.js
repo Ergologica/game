@@ -18,40 +18,55 @@ const TransactionManager = {
 
     async payEntryFee() {
         try {
-            const nanoErgs = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
-            
-            // 1. Otteniamo gli UTXO necessari
+            const userAddress = await ergo.get_change_address();
             const utxos = await ergo.get_utxos();
             
-            // 2. Costruiamo la transazione in formato standard EIP-12
-            const tx = {
+            if (!utxos || utxos.length === 0) {
+                alert("Wallet vuoto o non sincronizzato.");
+                return null;
+            }
+
+            // Conversione precisa in stringa per nanoErgs
+            const amountNano = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
+
+            // COSTRUZIONE TRANSAZIONE RIGIDA (EIP-12)
+            const txToSign = {
                 inputs: utxos,
+                dataInputs: [],
                 outputs: [
                     {
                         address: CONFIG.TREASURY_ADDRESS,
-                        value: nanoErgs,
-                        assets: [] // Obbligatorio per evitare errori di 'length'
+                        value: amountNano,
+                        assets: [] // Questo evita l'errore .length in Nautilus
                     }
                 ],
-                fee: "1100000", // 0.0011 ERG (fee standard)
+                changeAddress: userAddress,
+                fee: "1100000", // 0.0011 ERG
                 assetsToBurn: []
             };
 
-            // 3. Chiediamo a Nautilus di firmare
-            const signedTx = await ergo.sign_tx(tx);
+            // Chiamata alla firma
+            const signedTx = await ergo.sign_tx(txToSign);
             
-            // 4. Inviamo la transazione alla rete
+            // Invio
             const txId = await ergo.submit_tx(signedTx);
-            
-            console.log("Transazione inviata:", txId);
+            console.log("Successo! TX ID:", txId);
             return txId;
+
         } catch (e) {
-            console.error("Dettaglio Errore:", e);
-            if (e.info && e.info.includes("User rejected")) {
-                alert("Hai annullato il pagamento.");
-            } else {
-                alert("Errore nella creazione della transazione. Verifica di avere almeno 0.502 ERG nel wallet.");
-            }
+            console.error("Errore critico transazione:", e);
+            // Se fallisce ancora, usiamo l'ultima risorsa: l'API semplificata
+            return await this.fallbackSimplePay();
+        }
+    },
+
+    async fallbackSimplePay() {
+        try {
+            const amountNano = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
+            // Metodo alternativo supportato da alcune versioni di Nautilus
+            return await ergo.pay_to_address(CONFIG.TREASURY_ADDRESS, amountNano);
+        } catch (e) {
+            alert("Impossibile procedere al pagamento. Verifica i fondi nel wallet.");
             return null;
         }
     }
