@@ -1,72 +1,68 @@
 const CONFIG = {
+    // Il tuo indirizzo Mainnet confermato
     TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
     ENTRY_FEE_ERG: 0.5
 };
 
 const TransactionManager = {
+    /**
+     * Connette il sito al wallet Nautilus
+     */
     async connect() {
         if (typeof ergoConnector !== 'undefined' && ergoConnector.nautilus) {
-            return await ergoConnector.nautilus.connect();
+            const connected = await ergoConnector.nautilus.connect();
+            if (connected) {
+                console.log("Wallet connesso con successo");
+                return true;
+            }
+            return false;
         }
-        alert("Nautilus Wallet non trovato!");
+        alert("Nautilus Wallet non trovato! Per favore installalo.");
         return false;
     },
 
+    /**
+     * Recupera l'indirizzo principale dell'utente
+     */
     async getAddress() {
-        return await ergo.get_change_address();
-    },
-
-    async payEntryFee() {
         try {
-            const userAddress = await ergo.get_change_address();
-            const utxos = await ergo.get_utxos();
-            
-            if (!utxos || utxos.length === 0) {
-                alert("Wallet vuoto o non sincronizzato.");
-                return null;
-            }
-
-            // Conversione precisa in stringa per nanoErgs
-            const amountNano = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
-
-            // COSTRUZIONE TRANSAZIONE RIGIDA (EIP-12)
-            const txToSign = {
-                inputs: utxos,
-                dataInputs: [],
-                outputs: [
-                    {
-                        address: CONFIG.TREASURY_ADDRESS,
-                        value: amountNano,
-                        assets: [] // Questo evita l'errore .length in Nautilus
-                    }
-                ],
-                changeAddress: userAddress,
-                fee: "1100000", // 0.0011 ERG
-                assetsToBurn: []
-            };
-
-            // Chiamata alla firma
-            const signedTx = await ergo.sign_tx(txToSign);
-            
-            // Invio
-            const txId = await ergo.submit_tx(signedTx);
-            console.log("Successo! TX ID:", txId);
-            return txId;
-
+            return await ergo.get_change_address();
         } catch (e) {
-            console.error("Errore critico transazione:", e);
-            // Se fallisce ancora, usiamo l'ultima risorsa: l'API semplificata
-            return await this.fallbackSimplePay();
+            console.error("Errore recupero indirizzo:", e);
+            return null;
         }
     },
 
-    async fallbackSimplePay() {
+    /**
+     * Gestisce il pagamento di 0.5 ERG. 
+     * Utilizza il metodo pay_to_address per la massima compatibilità.
+     */
+    async payEntryFee() {
         try {
-            const amountNano = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
-            // Metodo alternativo supportato da alcune versioni di Nautilus
-            return await ergo.pay_to_address(CONFIG.TREASURY_ADDRESS, amountNano);
+            // Conversione in NanoErgs (0.5 ERG = 500,000,000 NanoErgs)
+            const nanoErgs = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
+            
+            console.log(`Richiesta di pagamento di ${CONFIG.ENTRY_FEE_ERG} ERG a ${CONFIG.TREASURY_ADDRESS}`);
+
+            // Questo comando apre la finestra di Nautilus e gestisce UTXOs e Fees internamente
+            const txId = await ergo.pay_to_address(CONFIG.TREASURY_ADDRESS, nanoErgs);
+            
+            if (txId) {
+                console.log("Transazione sottomessa! ID:", txId);
+                return txId;
+            }
+            return null;
         } catch (e) {
-            alert("Impossibile procedere al pagamento. Verifica i fondi nel wallet.");
+            console.error("Errore durante il pagamento:", e);
+            
+            // Gestione errori comuni
+            if (e.code === 2 || (e.info && e.info.includes("rejected"))) {
+                alert("Pagamento annullato dall'utente.");
+            } else if (e.info && e.info.includes("not enough")) {
+                alert("Fondi insufficienti! Assicurati di avere almeno 0.502 ERG per coprire le fee.");
+            } else {
+                alert("Errore tecnico. Assicurati che il wallet sia sincronizzato e su Mainnet.");
+            }
             return null;
         }
     }
