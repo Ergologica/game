@@ -20,8 +20,8 @@ const TransactionManager = {
       throw new Error("Nautilus wallet non installato");
     }
 
-    const connected = await ergoConnector.nautilus.connect();
-    if (!connected) {
+    const ok = await ergoConnector.nautilus.connect();
+    if (!ok) {
       throw new Error("Connessione al wallet rifiutata");
     }
 
@@ -36,11 +36,11 @@ const TransactionManager = {
       await this.connect();
 
       /* === Importi (NUMERI) === */
-      const amountNano = Math.floor(CONFIG.ENTRY_FEE_ERG * 1e9);
-      const feeNano = 1_100_000;
+      const amountNano = Math.floor(CONFIG.ENTRY_FEE_ERG * 1e9); // 0.5 ERG
+      const feeNano = 1_100_000; // 0.0011 ERG
       const totalNeeded = amountNano + feeNano;
 
-      /* === Wallet data === */
+      /* === Dati wallet === */
       const userAddress = await ergo.get_change_address();
       const currentHeight = await ergo.get_current_height();
       const utxos = await ergo.get_utxos(totalNeeded);
@@ -50,7 +50,7 @@ const TransactionManager = {
         return null;
       }
 
-      /* === Costruzione TX canonica (Nautilus-safe) === */
+      /* === COSTRUZIONE TX CANONICA (NO ergoTree) === */
       const unsignedTx = {
         inputs: utxos,
         dataInputs: [],
@@ -77,7 +77,7 @@ const TransactionManager = {
     } catch (e) {
       console.error("Errore transazione:", e);
 
-      // code 2 = utente ha annullato la firma
+      // code 2 = firma annullata dall’utente
       if (e?.code === 2) {
         console.log("Firma annullata dall’utente");
         return null;
@@ -93,12 +93,8 @@ const TransactionManager = {
 };
 
 /* =========================
-   UI BINDING (ESEMPIO)
+   DEBUG DI SICUREZZA
 ========================= */
 
-document.getElementById("payButton").onclick = async () => {
-  const txId = await TransactionManager.payEntryFee();
-  if (txId) {
-    alert("Pagamento completato!\nTX ID:\n" + txId);
-  }
-};
+// Deve stampare: undefined
+console.log("DEBUG address_to_tree:", ergo?.address_to_tree);
