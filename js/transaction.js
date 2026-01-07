@@ -1,63 +1,37 @@
 const CONFIG = {
-    // Il tuo indirizzo Mainnet confermato
     TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
     ENTRY_FEE_ERG: 0.5
 };
 
 const TransactionManager = {
-    /**
-     * Connette il sito al wallet Nautilus
-     */
+    // Forza la connessione e attende la risposta del wallet
     async connect() {
         if (typeof ergoConnector !== 'undefined' && ergoConnector.nautilus) {
-            const connected = await ergoConnector.nautilus.connect();
-            if (connected) {
-                console.log("Wallet connesso con successo");
+            const isConnected = await ergoConnector.nautilus.connect();
+            if (isConnected) {
+                // Piccola attesa per permettere a Nautilus di iniettare l'oggetto 'ergo'
+                await new Promise(resolve => setTimeout(resolve, 500));
                 return true;
             }
-            return false;
         }
-        alert("Nautilus Wallet non trovato! Per favore installalo.");
+        alert("Nautilus non risponde. Assicurati che l'estensione sia sbloccata.");
         return false;
     },
 
-    /**
-     * Recupera l'indirizzo principale dell'utente
-     */
-    async getAddress() {
-        try {
-            return await ergo.get_change_address();
-        } catch (e) {
-            console.error("Errore recupero indirizzo:", e);
-            return null;
-        }
-    },
-
-    /**
-     * Gestisce il pagamento di 0.5 ERG. 
-     * Utilizza il metodo pay_to_address per la massima compatibilità.
-     */
     async payEntryFee() {
         try {
-            // Conversione in NanoErgs (0.5 ERG = 500,000,000 NanoErgs)
+            // Verifichiamo se l'oggetto ergo esiste, altrimenti lo cerchiamo nell'estensione
+            const context = (typeof ergo !== 'undefined') ? ergo : await ergoConnector.nautilus.getContext();
+            
             const nanoErgs = (CONFIG.ENTRY_FEE_ERG * 1000000000).toString();
             
-            console.log(`Richiesta di pagamento di ${CONFIG.ENTRY_FEE_ERG} ERG a ${CONFIG.TREASURY_ADDRESS}`);
-
-            // Questo comando apre la finestra di Nautilus e gestisce UTXOs e Fees internamente
-            const txId = await ergo.pay_to_address(CONFIG.TREASURY_ADDRESS, nanoErgs);
-            
-            if (txId) {
-                console.log("Transazione sottomessa! ID:", txId);
-                return txId;
-            }
-            return null;
+            // Usiamo il contesto diretto del wallet
+            const txId = await context.pay_to_address(CONFIG.TREASURY_ADDRESS, nanoErgs);
+            return txId;
         } catch (e) {
-    // Sostituisci l'alert generico con questo per un test:
-    alert("ERRORE REALE: " + JSON.stringify(e)); 
-    console.error(e);
-    return null;
-}
-    }
+            console.error("Errore firma:", e);
+            alert("Errore durante la firma: " + (e.info || e.message || "Riprova tra un istante"));
+            return null;
+        }
     }
 };
