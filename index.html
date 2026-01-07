@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrErgsurHunt - Caccia al Tesoro Ergo</title>
+    <style>
+        :root { --primary: #ff5e00; --secondary: #2c3e50; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        #game-card { background: white; width: 90%; max-width: 450px; padding: 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); text-align: center; }
+        h1 { color: var(--primary); font-size: 1.8rem; margin-bottom: 5px; }
+        .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 25px; }
+        #output { min-height: 150px; }
+        button { background: var(--primary); color: white; border: none; padding: 14px 28px; border-radius: 12px; cursor: pointer; font-size: 1rem; font-weight: 600; width: 100%; transition: all 0.3s ease; }
+        button:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        input { width: 100%; padding: 12px; margin: 15px 0; border: 2px solid #eee; border-radius: 10px; font-size: 1rem; text-align: center; outline: none; transition: border-color 0.3s; }
+        input:focus { border-color: var(--primary); }
+        .level-box { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .status-badge { font-size: 0.8rem; padding: 4px 10px; border-radius: 20px; background: #eee; display: inline-block; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+    <div id="game-card">
+        <h1>🔍 TrErgsurHunt</h1>
+        <p class="subtitle">Risolvi 10 enigmi per vincere il tesoro</p>
+        
+        <div id="output">
+            <p>Connetti il tuo wallet Nautilus per iniziare.<br>Costo partecipazione: <strong>0.5 ERG</strong></p>
+            <button id="startGame">Connetti Wallet</button>
+        </div>
+    </div>
+
+    <script src="js/transaction.js"></script>
+    <script src="js/levels.js"></script>
+    <script src="js/treasurehunt.js"></script>
+    <script src="js/script.js"></script>
+</body>
+</html>
