@@ -53,17 +53,11 @@ const TransactionManager = {
             }
             return null;
         } catch (e) {
-            console.error("Errore durante il pagamento:", e);
-            
-            // Gestione errori comuni
-            if (e.code === 2 || (e.info && e.info.includes("rejected"))) {
-                alert("Pagamento annullato dall'utente.");
-            } else if (e.info && e.info.includes("not enough")) {
-                alert("Fondi insufficienti! Assicurati di avere almeno 0.502 ERG per coprire le fee.");
-            } else {
-                alert("Errore tecnico. Assicurati che il wallet sia sincronizzato e su Mainnet.");
-            }
-            return null;
-        }
+    // Sostituisci l'alert generico con questo per un test:
+    alert("ERRORE REALE: " + JSON.stringify(e)); 
+    console.error(e);
+    return null;
+}
+    }
     }
 };
