@@ -8,36 +8,69 @@ const startBtn = document.getElementById("startGame");
 
 startBtn.addEventListener("click", async () => {
   try {
-    await TransactionManager.connect();
+    // Tentativo di connessione iniziale
+    const connected = await TransactionManager.connect();
+    if (!connected) return;
 
     output.innerHTML = `
       <div class="level-box">
         <h3>Preparati alla sfida</h3>
-        <p>Per iniziare è richiesto il pagamento di <strong>0.5 ERG</strong>.</p>
-        <p><small>Il pagamento verrà inviato al tesoro per finanziare i premi.</small></p>
+        <p>Scegli quanto vuoi puntare per questa partita.</p>
+        
+        <div style="margin: 20px 0;">
+          <label style="display: block; margin-bottom: 10px; font-weight: bold;">
+            Importo Puntata (ERG):
+          </label>
+          <input 
+            type="number" 
+            id="betAmount" 
+            value="0.5" 
+            step="0.1" 
+            min="0.1" 
+            style="padding: 10px; width: 80px; text-align: center; font-size: 1.1rem;"
+          />
+        </div>
+
+        <p><small>Minimo: 0.1 ERG. I premi dipendono dalla tua puntata!</small></p>
         <button id="payBtn">Paga e Inizia</button>
       </div>
     `;
 
     const payBtn = document.getElementById("payBtn");
+    const betInput = document.getElementById("betAmount");
 
     payBtn.addEventListener("click", async () => {
+      const amount = parseFloat(betInput.value);
+
+      // Validazione locale dell'importo
+      if (isNaN(amount) || amount < 0.1) {
+        alert("Inserisci un importo valido (minimo 0.1 ERG)");
+        return;
+      }
+
       payBtn.disabled = true;
       payBtn.innerText = "Attesa firma...";
 
-      const txId = await TransactionManager.payEntryFee();
+      // Passiamo l'importo dinamico al manager
+      const txId = await TransactionManager.payEntryFee(amount);
 
       if (txId) {
         output.innerHTML = `
           <div class="loader"></div>
-          <p>Pagamento confermato! Caricamento enigmi...</p>
+          <p>Pagamento inviato con successo!</p>
+          <p><small>ID: ${txId.substring(0, 10)}...</small></p>
+          <p>Caricamento enigmi in corso...</p>
         `;
 
-        const levels = await generateRandomGame();
-        if (levels) {
-          hunt.levels = levels;
-          loadLevel();
-        }
+        // Simuliamo un piccolo ritardo per permettere al wallet di processare
+        setTimeout(async () => {
+          const levels = await generateRandomGame();
+          if (levels) {
+            hunt.levels = levels;
+            loadLevel();
+          }
+        }, 1500);
+        
       } else {
         payBtn.disabled = false;
         payBtn.innerText = "Paga e Inizia";
@@ -46,12 +79,12 @@ startBtn.addEventListener("click", async () => {
 
   } catch (e) {
     console.error(e);
-    alert("Wallet non connesso o operazione annullata.");
+    alert("Errore di connessione o operazione annullata.");
   }
 });
 
 /* =========================
-   GAME LOGIC
+   GAME LOGIC (Invariata)
 ========================= */
 
 function loadLevel() {
@@ -109,28 +142,31 @@ function processAnswer() {
 async function showVictory() {
   const addr = await TransactionManager.getAddress();
 
-  const victoryCode = btoa(addr + "_ERGO_PRO")
-    .substring(0, 12)
+  // Generiamo un codice vittoria che includa l'indirizzo per verifica
+  const victoryCode = btoa(addr + "_ERGO_CHAMP")
+    .substring(0, 14)
     .toUpperCase();
 
   output.innerHTML = `
     <div class="level-box">
       <h2 style="color: #4CAF50;">🏆 CAMPIONE!</h2>
-      <p>Hai superato tutti i livelli.</p>
+      <p>Hai risolto tutti gli enigmi.</p>
       <p>Il tuo codice vittoria unico è:</p>
 
       <div style="
         background: #f0f0f0;
         padding: 15px;
         font-family: monospace;
-        font-size: 1.5rem;
+        font-size: 1.2rem;
         margin: 15px 0;
-        border: 2px dashed #ccc;
+        border: 2px dashed #4CAF50;
+        word-break: break-all;
       ">
         ${victoryCode}
       </div>
 
-      <p>Inviaci questo codice su Tg per riscattare il premio!</p>
+      <p>Copia questo codice e invialo sul nostro canale Telegram per ricevere il premio proporzionale alla tua puntata!</p>
+      <button onclick="location.reload()">Gioca Ancora</button>
     </div>
   `;
 }
