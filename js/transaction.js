@@ -22,13 +22,21 @@ const TransactionManager = {
       const connected = await this.connect();
       if (!connected) return null;
 
-      // 1. Recuperiamo gli indirizzi del wallet in modo esplicito
-      // get_unused_addresses o get_change_address a volte restituiscono array o stringhe a seconda della versione
-      const availableAddresses = await ergo.get_change_address();
-      const changeAddr = Array.isArray(availableAddresses) ? availableAddresses[0] : availableAddresses;
+      // Recupera l'indirizzo in formato corretto
+      let changeAddr;
+      try {
+        // Prova prima con get_change_address
+        const addr = await ergo.get_change_address();
+        changeAddr = Array.isArray(addr) ? addr[0] : addr;
+      } catch (e) {
+        // Fallback su get_used_addresses
+        const addrs = await ergo.get_used_addresses();
+        changeAddr = Array.isArray(addrs) ? addrs[0] : addrs;
+      }
 
-      if (!changeAddr) {
-        throw new Error("Impossibile recuperare l'indirizzo del wallet. Riconnetti Nautilus.");
+      // VERIFICA CRITICA: l'indirizzo deve iniziare con "9" (mainnet)
+      if (!changeAddr || typeof changeAddr !== 'string' || !changeAddr.startsWith('9')) {
+        throw new Error("Indirizzo wallet non valido. Assicurati che Nautilus sia connesso alla mainnet.");
       }
 
       const amountNano = "500000000"; // 0.5 ERG
@@ -43,7 +51,7 @@ const TransactionManager = {
         return null;
       }
 
-      // 2. COSTRUZIONE ULTRA-PULITA
+      // Costruzione della transazione
       const unsignedTx = {
         inputs: utxos,
         dataInputs: [],
@@ -54,30 +62,31 @@ const TransactionManager = {
             assets: []
           }
         ],
-        // FORZIAMO il changeAddress a essere una stringa pulita
-        changeAddress: changeAddr.toString().trim(),
+        changeAddress: changeAddr.trim(),
         fee: feeNano,
         creationHeight: parseInt(currentHeight)
       };
 
-      console.log("Richiesta firma con indirizzo verificato:", changeAddr);
+      console.log("✅ Indirizzo change verificato:", changeAddr);
+      console.log("📝 Transazione non firmata:", unsignedTx);
 
       const signedTx = await ergo.sign_tx(unsignedTx);
       const txId = await ergo.submit_tx(signedTx);
-
-      console.log("Transazione inviata! ID:", txId);
+      
+      console.log("✅ Transazione inviata! ID:", txId);
       return txId;
 
     } catch (e) {
-      console.error("Errore firma:", e);
+      console.error("❌ Errore firma:", e);
       const msg = e.info || e.message || "";
       
       if (e.code === 2) {
-        console.log("Utente ha annullato.");
+        console.log("ℹ️ Utente ha annullato.");
       } else {
         alert("Errore tecnico: " + msg);
       }
       return null;
+
     } finally {
       this._pending = false;
     }
