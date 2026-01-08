@@ -1,6 +1,6 @@
 const CONFIG = {
     TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
-    ENTRY_FEE_ERG: 0.5
+    MIN_BET: 0.1
 };
 
 const TransactionManager = {
@@ -8,91 +8,66 @@ const TransactionManager = {
 
     async connect() {
         if (typeof ergoConnector === 'undefined' || !ergoConnector.nautilus) {
-            throw new Error("Nautilus non rilevato");
+            alert("Per favore installa Nautilus Wallet");
+            return false;
         }
         return await ergoConnector.nautilus.connect();
     },
 
-    async payEntryFee() {
+    async payEntryFee(userBet) {
         if (this._pending) return null;
         this._pending = true;
 
         try {
-            const isConnected = await this.connect();
-            if (!isConnected) throw new Error("Connessione rifiutata");
+            const connected = await this.connect();
+            if (!connected) throw new Error("Wallet non connesso");
 
-            const amountNano = "500000000"; // 0.5 ERG
-            const feeNano = "1100000";    // 0.0011 ERG
-            const totalRequired = "501100000";
+            // Convertiamo la puntata in NanoErgs (1 ERG = 10^9 NanoErg)
+            // Usiamo BigInt per evitare errori di arrotondamento JS
+            const betNano = (BigInt(Math.floor(userBet * 1000)) * BigInt(1000000)).toString();
+            const feeNano = "1100000"; // 0.0011 ERG standard fee
+            const totalRequired = (BigInt(betNano) + BigInt(feeNano)).toString();
 
-            // 1. Recupero dati
             const rawUtxos = await ergo.get_utxos(totalRequired);
             if (!rawUtxos || rawUtxos.length === 0) {
-                throw new Error("Fondi insufficienti");
+                throw new Error("Saldo insufficiente per la puntata e le commissioni.");
             }
 
             const changeAddress = await ergo.get_change_address();
             const creationHeight = await ergo.get_current_height();
 
-            // 2. DEEP CLEAN DEGLI UTXO
-            // Rimuoviamo qualsiasi campo che non sia boxId, value, ergoTree, ecc.
-            // Questo previene il crash 'startsWith' del validatore Rust
-            const cleanInputs = rawUtxos.map(utxo => ({
-                boxId: utxo.boxId,
-                value: utxo.value.toString(),
-                ergoTree: utxo.ergoTree,
-                assets: utxo.assets || [],
-                additionalRegisters: utxo.additionalRegisters || {},
-                creationHeight: utxo.creationHeight,
-                transactionId: utxo.transactionId,
-                index: utxo.index
-            }));
-
-            // 3. Costruzione Transazione "Barebone"
+            // Costruzione ultra-pulita per evitare il bug 'startsWith'
             const unsignedTx = {
-                inputs: cleanInputs,
+                inputs: rawUtxos.map(u => ({
+                    boxId: u.boxId,
+                    value: u.value.toString(),
+                    ergoTree: u.ergoTree,
+                    assets: u.assets || [],
+                    additionalRegisters: u.additionalRegisters || {},
+                    creationHeight: u.creationHeight,
+                    transactionId: u.transactionId,
+                    index: u.index
+                })),
                 dataInputs: [],
-                outputs: [
-                    {
-                        address: CONFIG.TREASURY_ADDRESS.trim(),
-                        value: amountNano,
-                        assets: []
-                    }
-                ],
+                outputs: [{
+                    address: CONFIG.TREASURY_ADDRESS.trim(),
+                    value: betNano,
+                    assets: []
+                }],
                 changeAddress: Array.isArray(changeAddress) ? changeAddress[0] : changeAddress,
                 fee: feeNano,
                 creationHeight: parseInt(creationHeight)
             };
 
-            console.log("Inviando TX pulita a Nautilus...");
-
-            // 4. FIRMA (Utilizzando solo sign_tx che è universale)
             const signedTx = await ergo.sign_tx(unsignedTx);
-            const txId = await ergo.submit_tx(signedTx);
-            
-            console.log("✅ Successo! ID:", txId);
-            return txId;
+            return await ergo.submit_tx(signedTx);
 
         } catch (error) {
-            console.error("Dettaglio Errore:", error);
-            const msg = error.info || error.message || "Errore sconosciuto";
-            
-            // Se l'errore persiste, è un problema di sincronizzazione dell'estensione
-            if (error.code !== 2) {
-                alert("Errore Wallet: " + msg + "\n\nSuggerimento: Se vedi ancora 'startsWith', vai nelle impostazioni di Nautilus e clicca su 'Resync'.");
-            }
+            console.error("Errore:", error);
+            alert("Errore Wallet: " + (error.info || error.message));
             return null;
         } finally {
             this._pending = false;
-        }
-    },
-
-    async getAddress() {
-        try {
-            const addr = await ergo.get_change_address();
-            return Array.isArray(addr) ? addr[0] : addr;
-        } catch (e) {
-            return "";
         }
     }
 };
