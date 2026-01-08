@@ -1,3 +1,4 @@
+// (intero file: versione aggiornata che prova inputs come array di oggetti {boxId: ...})
 const CONFIG = {
   TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
   ENTRY_FEE_ERG: "0.5"
@@ -6,7 +7,6 @@ const CONFIG = {
 const TransactionManager = {
   _pending: false,
 
-  // Utility per attendere
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   },
@@ -18,7 +18,7 @@ const TransactionManager = {
     }
     try {
       const connected = await ergoConnector.nautilus.connect();
-      await this.sleep(500); // Aspetta che la connessione si stabilizzi
+      await this.sleep(500);
       return connected;
     } catch (e) {
       console.error("Errore connect:", e);
@@ -28,7 +28,6 @@ const TransactionManager = {
 
   async ensureConnection() {
     try {
-      // Verifica se la connessione è ancora attiva
       await ergo.get_change_address();
       return true;
     } catch (e) {
@@ -37,7 +36,6 @@ const TransactionManager = {
     }
   },
 
-  // Restituisce una stringa con l'indirizzo (o null)
   async _resolveChangeAddress() {
     try {
       let addr = await ergo.get_change_address();
@@ -84,7 +82,7 @@ const TransactionManager = {
         throw new Error("Indirizzo wallet non valido o non trovato. Assicurati che Nautilus sia connesso alla mainnet e che il browser abbia concesso l'accesso agli indirizzi.");
       }
 
-      const amountNano = "500000000"; // 0.5 ERG
+      const amountNano = "500000000";
       const feeNano = "1100000";
       const totalNeeded = "501100000";
 
@@ -113,14 +111,13 @@ const TransactionManager = {
         return null;
       }
 
-      // Prepariamo due possibili payload da provare con sign_tx
       const unsignedFull = {
         inputs: validUtxos,
         dataInputs: [],
         outputs: [
           {
             address: CONFIG.TREASURY_ADDRESS.trim(),
-            value: amountNano, // lascio string per compatibilità
+            value: amountNano,
             assets: []
           }
         ],
@@ -129,8 +126,9 @@ const TransactionManager = {
         creationHeight: parseInt(currentHeight)
       };
 
-      const unsignedBoxIds = {
-        inputs: validUtxos.map(u => u.boxId), // alternativa: solo gli id
+      // ALTERNATIVA: inputs come oggetti { boxId: "..." } (non plain strings)
+      const unsignedBoxIdObjects = {
+        inputs: validUtxos.map(u => ({ boxId: u.boxId })),
         dataInputs: [],
         outputs: [
           {
@@ -148,22 +146,18 @@ const TransactionManager = {
 
       await this.sleep(300);
 
-      // Primo tentativo: payload completo
       let signedTx;
       try {
         signedTx = await ergo.sign_tx(unsignedFull);
         console.log("Firma avvenuta col payload full.");
       } catch (signErr1) {
         console.warn("sign_tx con payload 'full' fallito:", signErr1);
-        // stampo payload alternativo e provo a usare inputs come array di boxId
-        console.log("Provo alternativo payload (inputs come boxId):", unsignedBoxIds);
+        console.log("Provo alternativo payload (inputs come {boxId:...}):", unsignedBoxIdObjects);
         try {
-          signedTx = await ergo.sign_tx(unsignedBoxIds);
-          console.log("Firma avvenuta col payload boxIds.");
+          signedTx = await ergo.sign_tx(unsignedBoxIdObjects);
+          console.log("Firma avvenuta col payload boxIdObjects.");
         } catch (signErr2) {
-          // log esteso e rilancio per la gestione degli errori a monte
           console.error("sign_tx fallito con entrambi i payload. signErr1:", signErr1, "signErr2:", signErr2);
-          // rilanciamo l'errore migliore (signErr2 preferito se presente)
           throw signErr2 || signErr1;
         }
       }
@@ -178,7 +172,6 @@ const TransactionManager = {
 
     } catch (e) {
       console.error("❌ Errore firma / pagamento:", e);
-
       if (e.code) console.log("Codice errore:", e.code);
       if (e.info) console.log("Info errore:", e.info);
       if (e.message) console.log("Messaggio:", e.message);
