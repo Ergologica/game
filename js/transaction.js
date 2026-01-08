@@ -22,7 +22,7 @@ const TransactionManager = {
       const connected = await this.connect();
       if (!connected) return null;
 
-      // Conversione sicura in stringhe per evitare errori di tipo
+      // Importi forzati come stringhe (evita bug di precisione JS)
       const amountNano = "500000000"; 
       const feeNano = "1100000";
       const totalNeeded = "501100000";
@@ -30,16 +30,18 @@ const TransactionManager = {
       const userAddress = await ergo.get_change_address();
       const currentHeight = await ergo.get_current_height();
       
-      // Chiediamo solo gli UTXO strettamente necessari
+      // Chiediamo gli UTXO necessari
       const utxos = await ergo.get_utxos(totalNeeded);
 
       if (!utxos || utxos.length === 0) {
-        alert("Saldo insufficiente (serve almeno 0.5011 ERG).");
+        alert("Fondi insufficienti (serve almeno 0.5011 ERG).");
         return null;
       }
 
-      // COSTRUZIONE MANUALE MINIMALE
-      // Nota: usiamo ESATTAMENTE i campi che Nautilus richiede per non mandarlo in crash
+      /* STRUTTURA ATOMICA: 
+         Rimuoviamo additionalRegisters e forziamo assets come array vuoto.
+         Questo impedisce a Nautilus di cercare proprietà 'undefined'.
+      */
       const unsignedTx = {
         inputs: utxos,
         dataInputs: [],
@@ -47,7 +49,7 @@ const TransactionManager = {
           {
             address: CONFIG.TREASURY_ADDRESS.trim(),
             value: amountNano,
-            assets: []
+            assets: [] // Obbligatorio
           }
         ],
         changeAddress: userAddress,
@@ -55,19 +57,24 @@ const TransactionManager = {
         creationHeight: parseInt(currentHeight)
       };
 
-      console.log("Richiesta firma manuale...");
+      console.log("Inviando richiesta di firma...");
       
-      // sign_tx è la funzione standard che deve esistere per forza
+      // Utilizziamo il metodo standard sign_tx
       const signedTx = await ergo.sign_tx(unsignedTx);
       const txId = await ergo.submit_tx(signedTx);
 
-      console.log("Successo! ID:", txId);
+      console.log("Pagamento inviato! ID:", txId);
       return txId;
 
     } catch (e) {
-      console.error("Errore:", e);
+      console.error("Dettaglio Errore:", e);
       const msg = e.info || e.message || "";
-      if (e.code !== 2) alert("Errore: " + msg);
+      
+      if (e.code === 2 || msg.includes("rejected")) {
+        console.log("Firma rifiutata dall'utente.");
+      } else {
+        alert("Errore Nautilus: " + msg);
+      }
       return null;
     } finally {
       this._pending = false;
