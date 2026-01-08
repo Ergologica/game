@@ -21,25 +21,36 @@ const TransactionManager = {
             const isConnected = await this.connect();
             if (!isConnected) throw new Error("Connessione rifiutata");
 
-            // 1. Costanti rigorose in NanoErgs (Stringhe per evitare precisione JS)
             const amountNano = "500000000"; // 0.5 ERG
             const feeNano = "1100000";    // 0.0011 ERG
             const totalRequired = "501100000";
 
-            // 2. Recupero dati con validazione immediata
-            const utxos = await ergo.get_utxos(totalRequired);
-            if (!utxos || utxos.length === 0) {
-                throw new Error("Fondi insufficienti (serve almeno 0.5011 ERG)");
+            // 1. Recupero dati
+            const rawUtxos = await ergo.get_utxos(totalRequired);
+            if (!rawUtxos || rawUtxos.length === 0) {
+                throw new Error("Fondi insufficienti");
             }
 
             const changeAddress = await ergo.get_change_address();
             const creationHeight = await ergo.get_current_height();
 
-            // 3. COSTRUZIONE EIP-12 RIGOROSA
-            // Rimuoviamo ogni campo opzionale (niente additionalRegisters, niente assets vuoti se non necessari)
-            // Nautilus crasha se riceve campi nulli o formattati male.
+            // 2. DEEP CLEAN DEGLI UTXO
+            // Rimuoviamo qualsiasi campo che non sia boxId, value, ergoTree, ecc.
+            // Questo previene il crash 'startsWith' del validatore Rust
+            const cleanInputs = rawUtxos.map(utxo => ({
+                boxId: utxo.boxId,
+                value: utxo.value.toString(),
+                ergoTree: utxo.ergoTree,
+                assets: utxo.assets || [],
+                additionalRegisters: utxo.additionalRegisters || {},
+                creationHeight: utxo.creationHeight,
+                transactionId: utxo.transactionId,
+                index: utxo.index
+            }));
+
+            // 3. Costruzione Transazione "Barebone"
             const unsignedTx = {
-                inputs: utxos,
+                inputs: cleanInputs,
                 dataInputs: [],
                 outputs: [
                     {
@@ -48,36 +59,28 @@ const TransactionManager = {
                         assets: []
                     }
                 ],
-                changeAddress: changeAddress,
+                changeAddress: Array.isArray(changeAddress) ? changeAddress[0] : changeAddress,
                 fee: feeNano,
                 creationHeight: parseInt(creationHeight)
             };
 
-            console.log("TX pronta per Nautilus:", unsignedTx);
+            console.log("Inviando TX pulita a Nautilus...");
 
-            // 4. FIRMA E INVIO
-            // Usiamo un try/catch specifico per la firma
-            let signedTx;
-            try {
-                signedTx = await ergo.sign_tx(unsignedTx);
-            } catch (e) {
-                // Se Nautilus dà ancora 'startsWith', usiamo l'ultima risorsa:
-                // l'invio semplificato che delega la costruzione all'estensione.
-                if (e.info && e.info.includes("startsWith")) {
-                    console.warn("Rilevato bug WASM Nautilus, provo fallback...");
-                    return await ergo.pay_to_address(CONFIG.TREASURY_ADDRESS, amountNano);
-                }
-                throw e;
-            }
-
+            // 4. FIRMA (Utilizzando solo sign_tx che è universale)
+            const signedTx = await ergo.sign_tx(unsignedTx);
             const txId = await ergo.submit_tx(signedTx);
-            console.log("✅ Successo! TX ID:", txId);
+            
+            console.log("✅ Successo! ID:", txId);
             return txId;
 
         } catch (error) {
-            console.error("ERGO SDK Error:", error);
+            console.error("Dettaglio Errore:", error);
             const msg = error.info || error.message || "Errore sconosciuto";
-            if (error.code !== 2) alert("Errore Wallet: " + msg);
+            
+            // Se l'errore persiste, è un problema di sincronizzazione dell'estensione
+            if (error.code !== 2) {
+                alert("Errore Wallet: " + msg + "\n\nSuggerimento: Se vedi ancora 'startsWith', vai nelle impostazioni di Nautilus e clicca su 'Resync'.");
+            }
             return null;
         } finally {
             this._pending = false;
@@ -86,7 +89,8 @@ const TransactionManager = {
 
     async getAddress() {
         try {
-            return await ergo.get_change_address();
+            const addr = await ergo.get_change_address();
+            return Array.isArray(addr) ? addr[0] : addr;
         } catch (e) {
             return "";
         }
