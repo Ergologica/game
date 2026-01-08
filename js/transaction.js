@@ -8,7 +8,7 @@ const TransactionManager = {
 
     async connect() {
         if (typeof ergoConnector === 'undefined' || !ergoConnector.nautilus) {
-            alert("Per favore installa Nautilus Wallet");
+            alert("Nautilus Wallet non trovato. Assicurati che l'estensione sia installata.");
             return false;
         }
         return await ergoConnector.nautilus.connect();
@@ -22,52 +22,63 @@ const TransactionManager = {
             const connected = await this.connect();
             if (!connected) throw new Error("Wallet non connesso");
 
-            // Convertiamo la puntata in NanoErgs (1 ERG = 10^9 NanoErg)
-            // Usiamo BigInt per evitare errori di arrotondamento JS
-            const betNano = (BigInt(Math.floor(userBet * 1000)) * BigInt(1000000)).toString();
-            const feeNano = "1100000"; // 0.0011 ERG standard fee
+            // 1. Validazione input e conversione sicura
+            const safeBet = parseFloat(userBet) || CONFIG.MIN_BET;
+            const betNano = (BigInt(Math.floor(safeBet * 1000)) * BigInt(1000000)).toString();
+            const feeNano = "1100000"; 
             const totalRequired = (BigInt(betNano) + BigInt(feeNano)).toString();
 
-            const rawUtxos = await ergo.get_utxos(totalRequired);
-            if (!rawUtxos || rawUtxos.length === 0) {
-                throw new Error("Saldo insufficiente per la puntata e le commissioni.");
-            }
+            // 2. Recupero dati con attesa forzata (evita il bug asincrono)
+            const utxos = await ergo.get_utxos(totalRequired);
+            const changeAddr = await ergo.get_change_address();
+            const height = await ergo.get_current_height();
 
-            const changeAddress = await ergo.get_change_address();
-            const creationHeight = await ergo.get_current_height();
+            if (!utxos || utxos.length === 0) throw new Error("Fondi insufficienti");
 
-            // Costruzione ultra-pulita per evitare il bug 'startsWith'
+            // 3. COSTRUZIONE "NARROW": Passiamo solo stringhe e numeri certi
+            // Questo formato previene il crash 'startsWith' di Nautilus
             const unsignedTx = {
-                inputs: rawUtxos.map(u => ({
-                    boxId: u.boxId,
-                    value: u.value.toString(),
-                    ergoTree: u.ergoTree,
-                    assets: u.assets || [],
-                    additionalRegisters: u.additionalRegisters || {},
-                    creationHeight: u.creationHeight,
-                    transactionId: u.transactionId,
-                    index: u.index
-                })),
+                inputs: utxos,
                 dataInputs: [],
                 outputs: [{
-                    address: CONFIG.TREASURY_ADDRESS.trim(),
-                    value: betNano,
+                    address: String(CONFIG.TREASURY_ADDRESS).trim(),
+                    value: String(betNano),
                     assets: []
                 }],
-                changeAddress: Array.isArray(changeAddress) ? changeAddress[0] : changeAddress,
-                fee: feeNano,
-                creationHeight: parseInt(creationHeight)
+                // IMPORTANTE: Se changeAddr è un array, prendiamo il primo elemento
+                changeAddress: Array.isArray(changeAddr) ? String(changeAddr[0]) : String(changeAddr),
+                fee: String(feeNano),
+                creationHeight: parseInt(height)
             };
 
+            console.log("TX inviata per la firma:", unsignedTx);
+
+            // 4. Esecuzione firma
             const signedTx = await ergo.sign_tx(unsignedTx);
-            return await ergo.submit_tx(signedTx);
+            const txId = await ergo.submit_tx(signedTx);
+
+            return txId;
 
         } catch (error) {
-            console.error("Errore:", error);
-            alert("Errore Wallet: " + (error.info || error.message));
+            console.error("Errore critico:", error);
+            const errorMsg = error.info || error.message || "";
+            
+            // Gestione specifica dell'errore asincrono di Nautilus
+            if (errorMsg.includes("startsWith") || errorMsg.includes("undefined")) {
+                alert("Nautilus ha avuto un sussulto tecnico. \n\nPer risolvere: \n1. Chiudi e riapri il browser \n2. Sblocca Nautilus prima di cliccare");
+            } else if (error.code !== 2) {
+                alert("Errore: " + errorMsg);
+            }
             return null;
         } finally {
             this._pending = false;
         }
+    },
+
+    async getAddress() {
+        try {
+            const addr = await ergo.get_change_address();
+            return Array.isArray(addr) ? addr[0] : addr;
+        } catch (e) { return ""; }
     }
 };
