@@ -1,31 +1,32 @@
 /* =========================
    CONFIG
 ========================= */
-
 const CONFIG = {
-  TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
+  TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t".trim(),
   ENTRY_FEE_ERG: 0.5
 };
 
 /* =========================
    TRANSACTION MANAGER
 ========================= */
-
 const TransactionManager = {
-
   _pending: false,
 
   async connect() {
     if (typeof ergoConnector === "undefined" || !ergoConnector.nautilus) {
-      throw new Error("Nautilus wallet non installato");
+      alert("Nautilus wallet non installato!");
+      return false;
     }
-
     const ok = await ergoConnector.nautilus.connect();
-    if (!ok) {
-      throw new Error("Connessione al wallet rifiutata");
-    }
+    return ok;
+  },
 
-    return true;
+  async getAddress() {
+    try {
+      return await ergo.get_change_address();
+    } catch (e) {
+      return "00000000";
+    }
   },
 
   async payEntryFee() {
@@ -33,68 +34,69 @@ const TransactionManager = {
     this._pending = true;
 
     try {
-      await this.connect();
+      // Assicuriamoci che il wallet sia connesso
+      const connected = await this.connect();
+      if (!connected) throw new Error("Wallet non connesso");
 
-      /* === Importi (NUMERI) === */
-      const amountNano = Math.floor(CONFIG.ENTRY_FEE_ERG * 1e9); // 0.5 ERG
-      const feeNano = 1_100_000; // 0.0011 ERG
-      const totalNeeded = amountNano + feeNano;
+      // Calcoli in NanoErg
+      const amountNano = (BigInt(CONFIG.ENTRY_FEE_ERG * 1000) * BigInt(1e6)).toString();
+      const feeNano = "1100000"; // 0.0011 ERG standard fee
+      const totalNeeded = (BigInt(amountNano) + BigInt(feeNano)).toString();
 
-      /* === Dati wallet === */
+      // Recupero dati necessari
       const userAddress = await ergo.get_change_address();
       const currentHeight = await ergo.get_current_height();
       const utxos = await ergo.get_utxos(totalNeeded);
 
       if (!utxos || utxos.length === 0) {
-        alert("Fondi insufficienti");
+        alert("Saldo insufficiente per coprire 0.5 ERG + commissioni.");
         return null;
       }
 
-      /* === COSTRUZIONE TX CANONICA (NO ergoTree) === */
+      /* COSTRUZIONE TRANSAZIONE RIGOROSA 
+         Passiamo i valori numerici come STRINGHE per evitare il bug 'startsWith'
+      */
       const unsignedTx = {
         inputs: utxos,
         dataInputs: [],
         outputs: [{
           address: CONFIG.TREASURY_ADDRESS,
-          value: amountNano,
-          assets: [],
-          additionalRegisters: {}
+          value: amountNano, // Stringa
+          assets: []
         }],
         changeAddress: userAddress,
-        fee: feeNano,
-        creationHeight: currentHeight
+        fee: feeNano, // Stringa
+        creationHeight: parseInt(currentHeight)
       };
 
-      console.log("Unsigned TX:", unsignedTx);
+      console.log("Richiesta firma transazione...", unsignedTx);
 
-      /* === Firma + submit === */
+      // Firma e Invio
       const signedTx = await ergo.sign_tx(unsignedTx);
       const txId = await ergo.submit_tx(signedTx);
 
-      console.log("Transazione inviata:", txId);
+      console.log("Transazione inviata con successo! ID:", txId);
       return txId;
 
     } catch (e) {
-      console.error("Errore transazione:", e);
-
-      // code 2 = firma annullata dall’utente
-      if (e?.code === 2) {
-        console.log("Firma annullata dall’utente");
-        return null;
+      console.error("Errore nel processo di pagamento:", e);
+      
+      // Gestione errore 'startsWith' o altri errori di validazione
+      const errorMsg = e.info || e.message || "";
+      
+      if (e.code === 2 || errorMsg.includes("rejected")) {
+        console.log("Firma annullata dall'utente.");
+      } else {
+        alert("Errore Nautilus: " + (errorMsg.includes("startsWith") 
+          ? "Problema di validazione indirizzo. Riprova a ricaricare la pagina." 
+          : errorMsg));
       }
-
-      alert("Errore: " + (e.info || e.message));
       return null;
-
     } finally {
       this._pending = false;
     }
   }
 };
 
-/* =========================
-   DEBUG DI SICUREZZA
-========================= */
-
-// Deve stampare: undefined
-console.log("DEBUG address_to_tree:", ergo?.address_to_tree);
+// Debug per verificare l'integrità del caricamento
+console.log("TransactionManager caricato correttamente.");
