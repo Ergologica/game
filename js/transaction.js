@@ -100,29 +100,44 @@ const TransactionManager = {
       const totalNeeded = "501100000";
 
       const utxos = await ergo.get_utxos(totalNeeded);
+      console.log("DEBUG: utxos raw ->", utxos);
       await this.sleep(200);
+
+      // Validazione UTXO: assicurarsi che ci sia boxId (evitiamo startsWith su undefined altrove)
+      const utxosArray = Array.isArray(utxos) ? utxos : [];
+      const invalidUtxos = utxosArray.filter(u => !u || !u.boxId || typeof u.boxId !== 'string');
+      if (invalidUtxos.length) {
+        console.warn("Alcuni utxos non hanno boxId valido:", invalidUtxos);
+      }
+      const validUtxos = utxosArray.filter(u => u && typeof u.boxId === 'string');
+      if (!validUtxos.length) {
+        alert("Nessun UTXO valido trovato. Impossibile creare la transazione.");
+        this._pending = false;
+        return null;
+      }
 
       const currentHeight = await ergo.get_current_height();
       await this.sleep(200);
 
-      if (!utxos || utxos.length === 0) {
+      if (!validUtxos || validUtxos.length === 0) {
         alert("Fondi insufficienti (minimo 0.5011 ERG richiesti).");
         this._pending = false;
         return null;
       }
 
       const unsignedTx = {
-        inputs: utxos,
+        inputs: validUtxos,
         dataInputs: [],
         outputs: [
           {
             address: CONFIG.TREASURY_ADDRESS.trim(),
-            value: amountNano,
+            // alcune API si aspettano number, convertiamo
+            value: Number(amountNano),
             assets: []
           }
         ],
         changeAddress: changeAddr.trim(),
-        fee: feeNano,
+        fee: Number(feeNano),
         creationHeight: parseInt(currentHeight)
       };
 
@@ -130,7 +145,15 @@ const TransactionManager = {
 
       await this.sleep(300); // Pausa importante prima della firma
 
-      const signedTx = await ergo.sign_tx(unsignedTx);
+      let signedTx;
+      try {
+        signedTx = await ergo.sign_tx(unsignedTx);
+      } catch (signErr) {
+        // Log esteso per capire quale campo causa il problema
+        console.error("Errore durante sign_tx. Payload inviato:", JSON.stringify(unsignedTx, null, 2));
+        throw signErr;
+      }
+
       await this.sleep(300);
 
       const txId = await ergo.submit_tx(signedTx);
