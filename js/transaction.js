@@ -1,14 +1,8 @@
-/* =========================
-   CONFIG
-========================= */
 const CONFIG = {
-  TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t".trim(),
+  TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
   ENTRY_FEE_ERG: 0.5
 };
 
-/* =========================
-   TRANSACTION MANAGER
-========================= */
 const TransactionManager = {
   _pending: false,
 
@@ -17,15 +11,14 @@ const TransactionManager = {
       alert("Nautilus wallet non installato!");
       return false;
     }
-    const ok = await ergoConnector.nautilus.connect();
-    return ok;
+    return await ergoConnector.nautilus.connect();
   },
 
   async getAddress() {
     try {
       return await ergo.get_change_address();
     } catch (e) {
-      return "00000000";
+      return "Indirizzo non trovato";
     }
   },
 
@@ -34,62 +27,31 @@ const TransactionManager = {
     this._pending = true;
 
     try {
-      // Assicuriamoci che il wallet sia connesso
       const connected = await this.connect();
-      if (!connected) throw new Error("Wallet non connesso");
+      if (!connected) return null;
 
-      // Calcoli in NanoErg
-      const amountNano = (BigInt(CONFIG.ENTRY_FEE_ERG * 1000) * BigInt(1e6)).toString();
-      const feeNano = "1100000"; // 0.0011 ERG standard fee
-      const totalNeeded = (BigInt(amountNano) + BigInt(feeNano)).toString();
+      // Importo in NanoErg come stringa
+      const amountNano = "500000000"; 
 
-      // Recupero dati necessari
-      const userAddress = await ergo.get_change_address();
-      const currentHeight = await ergo.get_current_height();
-      const utxos = await ergo.get_utxos(totalNeeded);
+      console.log("Inviando richiesta di pagamento diretta...");
 
-      if (!utxos || utxos.length === 0) {
-        alert("Saldo insufficiente per coprire 0.5 ERG + commissioni.");
-        return null;
-      }
-
-      /* COSTRUZIONE TRANSAZIONE RIGOROSA 
-         Passiamo i valori numerici come STRINGHE per evitare il bug 'startsWith'
+      /* UTILIZZO DI pay_to_address:
+         Questo metodo è più "robusto" perché Nautilus costruisce la TX internamente.
+         Se questo fallisce, il problema è nella sincronizzazione del Wallet.
       */
-      const unsignedTx = {
-        inputs: utxos,
-        dataInputs: [],
-        outputs: [{
-          address: CONFIG.TREASURY_ADDRESS,
-          value: amountNano, // Stringa
-          assets: []
-        }],
-        changeAddress: userAddress,
-        fee: feeNano, // Stringa
-        creationHeight: parseInt(currentHeight)
-      };
+      const txId = await ergo.pay_to_address(CONFIG.TREASURY_ADDRESS, amountNano);
 
-      console.log("Richiesta firma transazione...", unsignedTx);
-
-      // Firma e Invio
-      const signedTx = await ergo.sign_tx(unsignedTx);
-      const txId = await ergo.submit_tx(signedTx);
-
-      console.log("Transazione inviata con successo! ID:", txId);
+      console.log("Transazione inviata! ID:", txId);
       return txId;
 
     } catch (e) {
-      console.error("Errore nel processo di pagamento:", e);
+      console.error("Errore firma:", e);
+      const msg = e.info || e.message || "";
       
-      // Gestione errore 'startsWith' o altri errori di validazione
-      const errorMsg = e.info || e.message || "";
-      
-      if (e.code === 2 || errorMsg.includes("rejected")) {
-        console.log("Firma annullata dall'utente.");
+      if (e.code === 2 || msg.includes("rejected")) {
+        console.log("Utente ha annullato.");
       } else {
-        alert("Errore Nautilus: " + (errorMsg.includes("startsWith") 
-          ? "Problema di validazione indirizzo. Riprova a ricaricare la pagina." 
-          : errorMsg));
+        alert("Errore Nautilus: " + msg);
       }
       return null;
     } finally {
@@ -97,6 +59,3 @@ const TransactionManager = {
     }
   }
 };
-
-// Debug per verificare l'integrità del caricamento
-console.log("TransactionManager caricato correttamente.");
