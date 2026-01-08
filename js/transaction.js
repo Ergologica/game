@@ -1,193 +1,94 @@
-// (intero file: versione aggiornata che prova inputs come array di oggetti {boxId: ...})
 const CONFIG = {
-  TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
-  ENTRY_FEE_ERG: "0.5"
+    TREASURY_ADDRESS: "9fTSmYKqZXLsyLvqDUbSwjZ7bMJMig9coSpbRdQunEo68sWyn4t",
+    ENTRY_FEE_ERG: 0.5
 };
 
 const TransactionManager = {
-  _pending: false,
+    _pending: false,
 
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  },
-
-  async connect() {
-    if (typeof ergoConnector === "undefined" || !ergoConnector.nautilus) {
-      alert("Nautilus wallet non trovato!");
-      return false;
-    }
-    try {
-      const connected = await ergoConnector.nautilus.connect();
-      await this.sleep(500);
-      return connected;
-    } catch (e) {
-      console.error("Errore connect:", e);
-      return false;
-    }
-  },
-
-  async ensureConnection() {
-    try {
-      await ergo.get_change_address();
-      return true;
-    } catch (e) {
-      console.log("Connessione persa, riconnetto...");
-      return await this.connect();
-    }
-  },
-
-  async _resolveChangeAddress() {
-    try {
-      let addr = await ergo.get_change_address();
-      console.log("DEBUG: get_change_address ->", addr);
-
-      if (!addr) {
-        const addrs = await ergo.get_used_addresses();
-        console.log("DEBUG: get_used_addresses ->", addrs);
-        addr = Array.isArray(addrs) && addrs.length > 0 ? addrs[0] : addrs;
-      }
-
-      let resolved = null;
-      if (Array.isArray(addr) && addr.length > 0) resolved = String(addr[0]);
-      else if (typeof addr === "string") resolved = addr;
-      else if (addr && typeof addr === "object" && addr.address) resolved = String(addr.address);
-
-      if (!resolved) return null;
-      return resolved.trim();
-    } catch (e) {
-      console.error("Errore risoluzione indirizzo:", e);
-      return null;
-    }
-  },
-
-  async payEntryFee() {
-    if (this._pending) return null;
-    this._pending = true;
-
-    try {
-      const connected = await this.ensureConnection();
-      if (!connected) {
-        this._pending = false;
-        return null;
-      }
-
-      await this.sleep(300);
-
-      const changeAddr = await this._resolveChangeAddress();
-      console.log("✅ Indirizzo resolved:", changeAddr);
-
-      await this.sleep(200);
-
-      if (!changeAddr || typeof changeAddr !== 'string' || !String(changeAddr).startsWith('9')) {
-        throw new Error("Indirizzo wallet non valido o non trovato. Assicurati che Nautilus sia connesso alla mainnet e che il browser abbia concesso l'accesso agli indirizzi.");
-      }
-
-      const amountNano = "500000000";
-      const feeNano = "1100000";
-      const totalNeeded = "501100000";
-
-      const utxos = await ergo.get_utxos(totalNeeded);
-      console.log("DEBUG: utxos raw ->", utxos);
-      await this.sleep(200);
-
-      const utxosArray = Array.isArray(utxos) ? utxos : [];
-      const invalidUtxos = utxosArray.filter(u => !u || !u.boxId || typeof u.boxId !== 'string');
-      if (invalidUtxos.length) {
-        console.warn("Alcuni utxos non hanno boxId valido:", invalidUtxos);
-      }
-      const validUtxos = utxosArray.filter(u => u && typeof u.boxId === 'string');
-      if (!validUtxos.length) {
-        alert("Nessun UTXO valido trovato. Impossibile creare la transazione.");
-        this._pending = false;
-        return null;
-      }
-
-      const currentHeight = await ergo.get_current_height();
-      await this.sleep(200);
-
-      if (!validUtxos || validUtxos.length === 0) {
-        alert("Fondi insufficienti (minimo 0.5011 ERG richiesti).");
-        this._pending = false;
-        return null;
-      }
-
-      const unsignedFull = {
-        inputs: validUtxos,
-        dataInputs: [],
-        outputs: [
-          {
-            address: CONFIG.TREASURY_ADDRESS.trim(),
-            value: amountNano,
-            assets: []
-          }
-        ],
-        changeAddress: changeAddr.trim(),
-        fee: feeNano,
-        creationHeight: parseInt(currentHeight)
-      };
-
-      // ALTERNATIVA: inputs come oggetti { boxId: "..." } (non plain strings)
-      const unsignedBoxIdObjects = {
-        inputs: validUtxos.map(u => ({ boxId: u.boxId })),
-        dataInputs: [],
-        outputs: [
-          {
-            address: CONFIG.TREASURY_ADDRESS.trim(),
-            value: amountNano,
-            assets: []
-          }
-        ],
-        changeAddress: changeAddr.trim(),
-        fee: feeNano,
-        creationHeight: parseInt(currentHeight)
-      };
-
-      console.log("📝 Transazione non firmata (full):", unsignedFull);
-
-      await this.sleep(300);
-
-      let signedTx;
-      try {
-        signedTx = await ergo.sign_tx(unsignedFull);
-        console.log("Firma avvenuta col payload full.");
-      } catch (signErr1) {
-        console.warn("sign_tx con payload 'full' fallito:", signErr1);
-        console.log("Provo alternativo payload (inputs come {boxId:...}):", unsignedBoxIdObjects);
-        try {
-          signedTx = await ergo.sign_tx(unsignedBoxIdObjects);
-          console.log("Firma avvenuta col payload boxIdObjects.");
-        } catch (signErr2) {
-          console.error("sign_tx fallito con entrambi i payload. signErr1:", signErr1, "signErr2:", signErr2);
-          throw signErr2 || signErr1;
+    async connect() {
+        if (typeof ergoConnector === 'undefined' || !ergoConnector.nautilus) {
+            throw new Error("Nautilus non rilevato");
         }
-      }
+        return await ergoConnector.nautilus.connect();
+    },
 
-      await this.sleep(300);
+    async payEntryFee() {
+        if (this._pending) return null;
+        this._pending = true;
 
-      const txId = await ergo.submit_tx(signedTx);
+        try {
+            const isConnected = await this.connect();
+            if (!isConnected) throw new Error("Connessione rifiutata");
 
-      console.log("✅ Transazione inviata! ID:", txId);
-      this._pending = false;
-      return txId;
+            // 1. Costanti rigorose in NanoErgs (Stringhe per evitare precisione JS)
+            const amountNano = "500000000"; // 0.5 ERG
+            const feeNano = "1100000";    // 0.0011 ERG
+            const totalRequired = "501100000";
 
-    } catch (e) {
-      console.error("❌ Errore firma / pagamento:", e);
-      if (e.code) console.log("Codice errore:", e.code);
-      if (e.info) console.log("Info errore:", e.info);
-      if (e.message) console.log("Messaggio:", e.message);
+            // 2. Recupero dati con validazione immediata
+            const utxos = await ergo.get_utxos(totalRequired);
+            if (!utxos || utxos.length === 0) {
+                throw new Error("Fondi insufficienti (serve almeno 0.5011 ERG)");
+            }
 
-      const msg = e.info || e.message || "Errore sconosciuto";
-      alert("Errore transazione: " + msg);
+            const changeAddress = await ergo.get_change_address();
+            const creationHeight = await ergo.get_current_height();
 
-      this._pending = false;
-      return null;
+            // 3. COSTRUZIONE EIP-12 RIGOROSA
+            // Rimuoviamo ogni campo opzionale (niente additionalRegisters, niente assets vuoti se non necessari)
+            // Nautilus crasha se riceve campi nulli o formattati male.
+            const unsignedTx = {
+                inputs: utxos,
+                dataInputs: [],
+                outputs: [
+                    {
+                        address: CONFIG.TREASURY_ADDRESS.trim(),
+                        value: amountNano,
+                        assets: []
+                    }
+                ],
+                changeAddress: changeAddress,
+                fee: feeNano,
+                creationHeight: parseInt(creationHeight)
+            };
+
+            console.log("TX pronta per Nautilus:", unsignedTx);
+
+            // 4. FIRMA E INVIO
+            // Usiamo un try/catch specifico per la firma
+            let signedTx;
+            try {
+                signedTx = await ergo.sign_tx(unsignedTx);
+            } catch (e) {
+                // Se Nautilus dà ancora 'startsWith', usiamo l'ultima risorsa:
+                // l'invio semplificato che delega la costruzione all'estensione.
+                if (e.info && e.info.includes("startsWith")) {
+                    console.warn("Rilevato bug WASM Nautilus, provo fallback...");
+                    return await ergo.pay_to_address(CONFIG.TREASURY_ADDRESS, amountNano);
+                }
+                throw e;
+            }
+
+            const txId = await ergo.submit_tx(signedTx);
+            console.log("✅ Successo! TX ID:", txId);
+            return txId;
+
+        } catch (error) {
+            console.error("ERGO SDK Error:", error);
+            const msg = error.info || error.message || "Errore sconosciuto";
+            if (error.code !== 2) alert("Errore Wallet: " + msg);
+            return null;
+        } finally {
+            this._pending = false;
+        }
+    },
+
+    async getAddress() {
+        try {
+            return await ergo.get_change_address();
+        } catch (e) {
+            return "";
+        }
     }
-  },
-
-  async getAddress() {
-    const addr = await this._resolveChangeAddress();
-    return addr || "";
-  }
 };
-
-window.TransactionManager = TransactionManager;
